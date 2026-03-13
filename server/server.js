@@ -15,7 +15,7 @@ const app = express();
 app.use(express.json())
 // 1. Updated CORS Configuration (Step 4)
 app.use(cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: process.env.CLIENT_URL,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
