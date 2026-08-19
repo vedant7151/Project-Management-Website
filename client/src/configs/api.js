@@ -1,23 +1,26 @@
 import axios from 'axios'
 
-const resolvedBaseUrl = import.meta.env.VITE_BASE_URL || 'http://localhost:5000/api'
+const PRODUCTION_API = 'https://project-management-website-duhr.onrender.com/api'
 
-if (!import.meta.env.VITE_BASE_URL) {
-    // Fallback helps local dev when env is missing, without changing API behavior when it is set.
+const resolvedBaseUrl =
+    import.meta.env.VITE_BASE_URL ||
+    (import.meta.env.PROD ? PRODUCTION_API : 'http://localhost:5000/api')
+
+if (!import.meta.env.VITE_BASE_URL && import.meta.env.PROD) {
     console.warn(
-        '[API] VITE_BASE_URL is not defined; falling back to default http://localhost:5000/api. ' +
-        'Set VITE_BASE_URL in your client env to match your backend URL.'
+        `[API] VITE_BASE_URL is not defined; using ${PRODUCTION_API}. ` +
+        'Set VITE_BASE_URL on Vercel to your backend /api URL.'
     )
 }
 
 const api = axios.create({
     baseURL: resolvedBaseUrl,
+    timeout: 45000,
     headers: {
         'Content-Type': 'application/json',
     },
 })
 
-// Centralized Error Handling Interceptor (Step 6 & 7)
 api.interceptors.response.use(
     (response) => response,
     (error) => {

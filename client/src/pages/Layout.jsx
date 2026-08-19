@@ -10,10 +10,12 @@ import { Loader2Icon, AlertCircle } from 'lucide-react'
 import { useUser, SignIn, useAuth, CreateOrganization, useOrganizationList } from '@clerk/clerk-react'
 import { fetchWorkspaces } from '../features/workspaceSlice'
 
+const MAX_WORKSPACE_SYNC_ATTEMPTS = 15
+
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [syncAttempts, setSyncAttempts] = useState(0)
     
-    // 1. EXTRACT 'error' FROM REDUX STATE
     const { loading, workspaces, error } = useSelector((state) => state.workspace)
     
     const dispatch = useDispatch()
@@ -24,44 +26,49 @@ const Layout = () => {
         userMemberships: { infinite: true },
     });
 
-    // Initial load of theme
+    const orgCount = userMemberships?.count ?? 0
+
     useEffect(() => {
         dispatch(loadTheme())
     }, [dispatch])
 
-    // 2. SMART FETCH LOGIC (BREAKS THE LOOP)
+    // Clerk may have the new org before Inngest writes it to Postgres.
+    // Poll a few times instead of spinning forever.
     useEffect(() => {
-        // Wait for Clerk to load
-        if (!isLoaded || !isOrgLoaded || !user) return;
+        if (!isLoaded || !isOrgLoaded || !user || error) return
+        if (orgCount === 0) return
+        if (workspaces.length > 0) return
+        if (loading) return
+        if (syncAttempts >= MAX_WORKSPACE_SYNC_ATTEMPTS) return
 
-        // FETCH CONDITION:
-        // 1. Redux is empty
-        // 2. We are NOT currently loading
-        // 3. We do NOT have a previous error (This stops the infinite loop!)
-        // 4. Clerk says we actually have organizations to fetch
-        // CASE A: Initial load — Redux is empty, fetch for the first time
-        const needsInitialLoad = workspaces.length === 0;
-        // CASE B: Stale sync — Redux has workspaces but count changed (e.g. workspace deleted from DB)
-        const needsSync = workspaces.length > 0 && userMemberships.count !== workspaces.length;
-
-        if (!loading && !error && userMemberships.count > 0 && (needsInitialLoad || needsSync)) {
+        const delay = syncAttempts === 0 ? 0 : 2000
+        const timer = setTimeout(() => {
             dispatch(fetchWorkspaces({ getToken }))
-        }
+                .finally(() => setSyncAttempts((n) => n + 1))
+        }, delay)
+
+        return () => clearTimeout(timer)
     }, [
-        user?.id, 
-        isLoaded, 
-        isOrgLoaded, 
-        workspaces.length, 
-        loading, 
-        error, // Added error to dependencies
-        userMemberships.count, 
-        dispatch, 
-        getToken
+        user?.id,
+        isLoaded,
+        isOrgLoaded,
+        orgCount,
+        workspaces.length,
+        loading,
+        error,
+        syncAttempts,
+        dispatch,
+        getToken,
     ])
 
-    // --- RENDER STATES ---
+    if (!isLoaded) {
+        return (
+            <div className='flex items-center justify-center h-screen bg-white dark:bg-zinc-950'>
+                <Loader2Icon className="size-7 text-blue-500 animate-spin" />
+            </div>
+        )
+    }
 
-    // A. Not Logged In
     if (!user) {
         return (
             <div className='flex justify-center items-center h-screen bg-white dark:bg-zinc-950'>
@@ -70,13 +77,14 @@ const Layout = () => {
         )
     }
 
-    // B. ERROR STATE (New!) - Shows the error instead of spinning forever
-    if (error) {
+    if (error || (orgCount > 0 && workspaces.length === 0 && syncAttempts >= MAX_WORKSPACE_SYNC_ATTEMPTS)) {
         return (
             <div className='flex flex-col items-center justify-center h-screen bg-white dark:bg-zinc-950 text-red-500'>
                 <AlertCircle className="size-12 mb-4" />
                 <h2 className="text-xl font-bold mb-2">Something went wrong</h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+                <p className="text-gray-600 dark:text-gray-400 mb-4 text-center max-w-md">
+                    {error || 'Workspace was created in Clerk but is not in the database yet. Check Inngest/Clerk webhooks, then retry.'}
+                </p>
                 <button 
                     onClick={() => window.location.reload()} 
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
@@ -87,8 +95,8 @@ const Layout = () => {
         )
     }
 
-    // C. Loading State
-    if (loading) {
+    const waitingForWorkspace = orgCount > 0 && workspaces.length === 0
+    if (loading || !isOrgLoaded || waitingForWorkspace) {
         return (
             <div className='flex items-center justify-center h-screen bg-white dark:bg-zinc-950'>
                 <Loader2Icon className="size-7 text-blue-500 animate-spin" />
@@ -96,8 +104,7 @@ const Layout = () => {
         )
     }
 
-    // D. No Organizations Found -> Create New
-    if (isOrgLoaded && userMemberships.count === 0 && workspaces.length === 0) {
+    if (isOrgLoaded && orgCount === 0 && workspaces.length === 0) {
         return (
             <div className='min-h-screen flex flex-col gap-6 justify-center items-center bg-white dark:bg-zinc-950 px-4'>
                 <div className='text-center space-y-2'>
@@ -109,7 +116,6 @@ const Layout = () => {
         )
     }
 
-    // E. Main Application
     return (
         <div className="flex bg-white dark:bg-zinc-950 text-gray-900 dark:text-slate-100">
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />

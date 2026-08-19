@@ -13,9 +13,20 @@ import commentRouter from './routes/commentRoutes.js';
 const app = express();
 
 app.use(express.json())
-// 1. Updated CORS Configuration (Step 4)
+
+const allowedOrigins = [
+    process.env.CLIENT_URL,
+    'https://project-management-website-chi.vercel.app',
+    ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173']),
+].filter(Boolean)
+
 app.use(cors({
-    origin: process.env.CLIENT_URL,
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            return callback(null, true)
+        }
+        return callback(new Error(`CORS blocked origin: ${origin}`))
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -47,7 +58,5 @@ app.use("/api/comments" , protect , commentRouter)
 const PORT = process.env.PORT || 5000
 
 app.listen(PORT , ()=> {
-    const clientUrl = process.env.CLIENT_URL || "http://localhost:5173"
     console.log(`Server Started on port ${PORT}`)
-    
 })
