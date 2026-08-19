@@ -47,7 +47,11 @@ app.use((req, res, next) => {
 app.use(clerkMiddleware())
 
 app.get('/' , (req , res) => res.send('Server is live'))
-app.use("/api/inngest", serve({ client: inngest, functions }));
+
+const inngestHandler = serve({ client: inngest, functions })
+app.get("/api/inngest", inngestHandler)
+app.post("/api/inngest", inngestHandler)
+app.put("/api/inngest", inngestHandler)
 
 //Routes
 app.use("/api/workspaces" ,protect, workspaceRouter)
