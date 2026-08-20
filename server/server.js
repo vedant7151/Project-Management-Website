@@ -14,6 +14,17 @@ const app = express();
 
 app.use(express.json())
 
+// Must be app.use("/api/inngest", …) so Inngest sees path "/".
+// Must be registered before Clerk: Inngest signs with Authorization,
+// which Clerk otherwise treats as a session and returns 401.
+const inngestHandler = serve({ client: inngest, functions })
+app.use("/api/inngest", (req, res, next) => {
+    if (!["GET", "POST", "PUT"].includes(req.method)) {
+        return res.status(405).json({ message: "Method not allowed" })
+    }
+    return inngestHandler(req, res, next)
+})
+
 const allowedOrigins = [
     process.env.CLIENT_URL,
     'https://project-management-website-chi.vercel.app',
@@ -32,36 +43,10 @@ app.use(cors({
     credentials: true,
 }))
 
-// 2. Request/Response logging (helps debug silent failures)
-app.use((req, res, next) => {
-    const start = Date.now();
-    const hasAuthHeader = Boolean(req.headers.authorization);
-    res.on("finish", () => {
-        const ms = Date.now() - start;
-        // console.log(
-        //     `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${ms}ms) authHeader=${hasAuthHeader}`
-        // );
-    });
-    next();
-});
+app.use(clerkMiddleware())
+
 app.get('/' , (req , res) => res.send('Server is live'))
 
-// Inngest signs requests with Authorization. Clerk must not run on this
-// path or it treats that header as a session token and returns 401.
-const inngestHandler = serve({ client: inngest, functions })
-app.get("/api/inngest", inngestHandler)
-app.post("/api/inngest", inngestHandler)
-app.put("/api/inngest", inngestHandler)
-
-const clerk = clerkMiddleware()
-app.use((req, res, next) => {
-    if (req.path.startsWith('/api/inngest')) {
-        return next()
-    }
-    return clerk(req, res, next)
-})
-
-//Routes
 app.use("/api/workspaces" ,protect, workspaceRouter)
 app.use("/api/projects" , protect , projectRouter)
 app.use("/api/tasks" , protect , tastRouter)
