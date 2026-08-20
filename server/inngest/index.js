@@ -3,7 +3,7 @@ import prisma from "../config/prisma.js";
 import sendEmail from "../config/nodemailer.js";
 
 // Create a client to send and receive events
-export const inngest = new Inngest({ id: "project-management" });
+export const inngest = new Inngest({ id: "project-management-new" });
 
 // Helper to safely extract fields from Clerk payload
 function extractUserFields(data) {
