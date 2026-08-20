@@ -44,14 +44,22 @@ app.use((req, res, next) => {
     });
     next();
 });
-app.use(clerkMiddleware())
-
 app.get('/' , (req , res) => res.send('Server is live'))
 
+// Inngest signs requests with Authorization. Clerk must not run on this
+// path or it treats that header as a session token and returns 401.
 const inngestHandler = serve({ client: inngest, functions })
 app.get("/api/inngest", inngestHandler)
 app.post("/api/inngest", inngestHandler)
 app.put("/api/inngest", inngestHandler)
+
+const clerk = clerkMiddleware()
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/inngest')) {
+        return next()
+    }
+    return clerk(req, res, next)
+})
 
 //Routes
 app.use("/api/workspaces" ,protect, workspaceRouter)
